@@ -55,64 +55,37 @@ public class FirebaseConfig {
                         throw new IOException("El JSON no termina con '}'. Verifique el formato.");
                     }
                     
-                    // CRÍTICO: Normalizar el JSON ANTES de parsearlo
-                    // Primero, corregir el private_key si tiene \n (un solo backslash) sin doble escape
-                    if (jsonToUse.contains("\"private_key\"")) {
-                        int privateKeyStart = jsonToUse.indexOf("\"private_key\"");
-                        if (privateKeyStart >= 0) {
-                            int valueStart = jsonToUse.indexOf("\"", privateKeyStart + 12) + 1;
-                            int valueEnd = jsonToUse.indexOf("\"", valueStart);
-                            if (valueEnd > valueStart && valueEnd < jsonToUse.length()) {
-                                String privateKeyValue = jsonToUse.substring(valueStart, valueEnd);
-                                
-                                // CRÍTICO: Detectar y corregir diferentes formatos
-                                boolean needsFix = false;
-                                String fixedPrivateKey = privateKeyValue;
-                                
-                                // Caso 1: Tiene saltos de línea reales (caracteres \n o \r)
-                                if (privateKeyValue.contains("\n") || privateKeyValue.contains("\r")) {
-                                    System.out.println("Detectados saltos de línea reales en private_key, normalizando...");
-                                    fixedPrivateKey = privateKeyValue
-                                        .replace("\r\n", "\\\\n")
-                                        .replace("\r", "\\\\n")
-                                        .replace("\n", "\\\\n");
-                                    needsFix = true;
-                                }
-                                // Caso 2: Tiene \n (un solo backslash) pero no \\n (doble backslash)
-                                // Verificar que NO tenga \\\\n (cuatro backslashes) que sería correcto
-                                else if (privateKeyValue.contains("\\n") && !privateKeyValue.contains("\\\\n")) {
-                                    System.out.println("Detectado \\n sin doble escape, corrigiendo para JSON válido...");
-                                    // Reemplazar \n por \\n (necesitamos \\\\n en Java string para representar \\n)
-                                    fixedPrivateKey = privateKeyValue.replace("\\n", "\\\\n");
-                                    needsFix = true;
-                                }
-                                
-                                if (needsFix) {
-                                    jsonToUse = jsonToUse.substring(0, valueStart) + fixedPrivateKey + jsonToUse.substring(valueEnd);
-                                    System.out.println("✓ private_key normalizado");
-                                }
-                            }
-                        }
-                    }
-                    
-                    // Eliminar saltos de línea reales entre propiedades (fuera de strings)
-                    jsonToUse = jsonToUse
-                        .replace("\r\n", " ")
-                        .replace("\r", " ")
-                        .replace("\n", " ")
-                        .replaceAll(" +", " ")
-                        .trim();
-                    
-                    // Ahora intentar parsear con Jackson para verificar que sea válido
+                    // Verificar que el JSON pueda parsearse correctamente
+                    // Solo hacer correcciones si es absolutamente necesario
                     ObjectMapper mapper = new ObjectMapper();
                     try {
+                        // Intentar parsear el JSON directamente (debería funcionar si está bien formateado)
                         JsonNode jsonNode = mapper.readTree(jsonToUse);
-                        // Reconstruir para asegurar formato correcto
-                        jsonToUse = mapper.writeValueAsString(jsonNode);
-                        System.out.println("✓ JSON validado y reconstruido, tamaño: " + jsonToUse.length() + " caracteres");
+                        // Si se puede parsear, usar el JSON tal cual (está correcto)
+                        System.out.println("✓ JSON válido y parseable, tamaño: " + jsonToUse.length() + " caracteres");
+                        // No reconstruir, usar el original que funciona
                     } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
-                        System.err.println("ADVERTENCIA: JSON parse falló después de normalización: " + e.getMessage());
-                        System.err.println("Continuando con JSON normalizado manualmente...");
+                        System.err.println("ADVERTENCIA: JSON no puede parsearse, intentando normalizar...");
+                        System.err.println("Error: " + e.getMessage());
+                        
+                        // Solo si falla el parse, intentar normalizar
+                        // Eliminar saltos de línea reales entre propiedades (fuera de strings)
+                        jsonToUse = jsonToUse
+                            .replace("\r\n", " ")
+                            .replace("\r", " ")
+                            .replace("\n", " ")
+                            .replaceAll(" +", " ")
+                            .trim();
+                        
+                        // Intentar parsear de nuevo
+                        try {
+                            JsonNode jsonNode = mapper.readTree(jsonToUse);
+                            jsonToUse = mapper.writeValueAsString(jsonNode);
+                            System.out.println("✓ JSON normalizado y reconstruido correctamente");
+                        } catch (com.fasterxml.jackson.core.JsonProcessingException e2) {
+                            System.err.println("ERROR: JSON aún no puede parsearse después de normalización");
+                            throw new IOException("El JSON no puede parsearse: " + e2.getMessage(), e2);
+                        }
                     }
                     
                     serviceAccount = new ByteArrayInputStream(jsonToUse.getBytes("UTF-8"));
