@@ -13,6 +13,23 @@ import java.util.Map;
 @RequestMapping("/api/diagnostico")
 public class DiagnosticoControlador {
 
+    @GetMapping("/health")
+    public ResponseEntity<Map<String, Object>> health() {
+        Map<String, Object> health = new HashMap<>();
+        health.put("status", "UP");
+        health.put("timestamp", System.currentTimeMillis());
+        health.put("message", "Backend is running");
+        return ResponseEntity.ok(health);
+    }
+
+    @GetMapping(value = {"/", ""})
+    public ResponseEntity<Map<String, String>> root() {
+        Map<String, String> response = new HashMap<>();
+        response.put("message", "Diagnóstico API disponible");
+        response.put("endpoints", "/health, /firebase");
+        return ResponseEntity.ok(response);
+    }
+
     @GetMapping("/firebase")
     public ResponseEntity<Map<String, Object>> diagnosticarFirebase() {
         Map<String, Object> diagnostico = new HashMap<>();
