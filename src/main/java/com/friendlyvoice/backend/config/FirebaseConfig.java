@@ -43,12 +43,34 @@ public class FirebaseConfig {
                 System.out.println("Tamaño del JSON: " + firebaseServiceAccountJson.length() + " caracteres");
                 System.out.println("Primeros 100 caracteres: " + firebaseServiceAccountJson.substring(0, Math.min(100, firebaseServiceAccountJson.length())));
                 try {
-                    serviceAccount = new ByteArrayInputStream(firebaseServiceAccountJson.getBytes("UTF-8"));
+                    // Normalizar el JSON: eliminar saltos de línea reales entre propiedades
+                    // PERO mantener \\n en el private_key (doble backslash = escape en JSON)
+                    String normalizedJson = firebaseServiceAccountJson
+                        .replaceAll("(?<!\\\\)\\r?\\n", " ")  // Eliminar saltos de línea reales (excepto los escapados)
+                        .replaceAll(" +", " ")                 // Normalizar espacios múltiples
+                        .trim();
+                    
+                    // Verificar que empieza y termina correctamente
+                    if (!normalizedJson.startsWith("{")) {
+                        throw new IOException("El JSON no empieza con '{'. Verifique el formato.");
+                    }
+                    if (!normalizedJson.endsWith("}")) {
+                        throw new IOException("El JSON no termina con '}'. Verifique el formato.");
+                    }
+                    
+                    // Verificar que el private_key tenga los saltos de línea correctamente escapados
+                    if (!normalizedJson.contains("\\\\n") && normalizedJson.contains("private_key")) {
+                        System.out.println("ADVERTENCIA: private_key puede no tener saltos de línea escapados correctamente");
+                        System.out.println("El private_key debe tener \\\\n (doble backslash + n) para representar saltos de línea");
+                    }
+                    
+                    System.out.println("JSON normalizado, tamaño: " + normalizedJson.length() + " caracteres");
+                    serviceAccount = new ByteArrayInputStream(normalizedJson.getBytes("UTF-8"));
                     System.out.println("✓ Stream creado desde variable de entorno");
                 } catch (Exception e) {
                     System.err.println("ERROR al crear stream desde variable de entorno: " + e.getMessage());
                     e.printStackTrace();
-                    throw new IOException("Failed to create stream from FIREBASE_SERVICE_ACCOUNT environment variable", e);
+                    throw new IOException("Failed to create stream from FIREBASE_SERVICE_ACCOUNT environment variable: " + e.getMessage(), e);
                 }
             } else {
                 System.out.println("Variable de entorno FIREBASE_SERVICE_ACCOUNT no encontrada o vacía, intentando otras fuentes...");
@@ -91,7 +113,13 @@ public class FirebaseConfig {
 
             try {
                 System.out.println("Parseando credenciales desde stream...");
+                
+                // Crear credenciales con refresh de tokens
                 GoogleCredentials credentials = GoogleCredentials.fromStream(serviceAccount);
+                
+                // IMPORTANTE: Crear credenciales con acceso a Firestore
+                credentials = credentials.createScoped("https://www.googleapis.com/auth/cloud-platform");
+                
                 System.out.println("✓ Credenciales de Google parseadas correctamente");
                 
                 FirebaseOptions options = FirebaseOptions.builder()
