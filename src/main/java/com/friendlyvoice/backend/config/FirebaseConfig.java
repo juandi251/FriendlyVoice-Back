@@ -65,24 +65,37 @@ public class FirebaseConfig {
                             if (valueEnd > valueStart && valueEnd < jsonToUse.length()) {
                                 String privateKeyValue = jsonToUse.substring(valueStart, valueEnd);
                                 
-                                // Si tiene saltos de línea reales, convertirlos a \\n para JSON
-                                // En JSON, un salto de línea dentro de un string debe ser \\n (doble backslash + n)
+                                // CRÍTICO: El private_key debe tener \\n (doble backslash + n) para JSON válido
+                                // Detectamos y corregimos diferentes formatos:
+                                // 1. Saltos de línea reales (\n, \r) -> convertir a \\n
+                                // 2. \n (un solo backslash) -> convertir a \\n
+                                // 3. \\n (doble backslash) -> ya está correcto
+                                
+                                boolean needsFix = false;
+                                String fixedPrivateKey = privateKeyValue;
+                                
+                                // Caso 1: Tiene saltos de línea reales
                                 if (privateKeyValue.contains("\n") || privateKeyValue.contains("\r")) {
-                                    System.out.println("Convirtiendo saltos de línea reales en private_key a formato JSON");
-                                    // Convertir saltos de línea reales a \\n (en Java necesitamos \\\\n para representar \\n en el string)
-                                    String fixedPrivateKey = privateKeyValue
+                                    System.out.println("Detectados saltos de línea reales en private_key, normalizando...");
+                                    fixedPrivateKey = privateKeyValue
                                         .replace("\r\n", "\\\\n")   // Windows
                                         .replace("\r", "\\\\n")      // Mac
                                         .replace("\n", "\\\\n");     // Unix
-                                    
+                                    needsFix = true;
+                                }
+                                // Caso 2: Tiene \n pero no \\n (un solo backslash escapado incorrectamente)
+                                else if (privateKeyValue.contains("\\n") && !privateKeyValue.contains("\\\\n")) {
+                                    System.out.println("Detectado \\n sin doble escape, corrigiendo para JSON válido...");
+                                    fixedPrivateKey = privateKeyValue.replace("\\n", "\\\\n");
+                                    needsFix = true;
+                                }
+                                
+                                if (needsFix) {
                                     // Reemplazar el valor en el JSON
                                     jsonToUse = jsonToUse.substring(0, valueStart) + fixedPrivateKey + jsonToUse.substring(valueEnd);
                                     System.out.println("✓ private_key normalizado correctamente");
-                                } else if (privateKeyValue.contains("\\n") && !privateKeyValue.contains("\\\\n")) {
-                                    // Si tiene \n pero no \\n, escapar correctamente para JSON
-                                    System.out.println("Asegurando que \\n esté correctamente escapado para JSON");
-                                    String fixedPrivateKey = privateKeyValue.replace("\\n", "\\\\n");
-                                    jsonToUse = jsonToUse.substring(0, valueStart) + fixedPrivateKey + jsonToUse.substring(valueEnd);
+                                } else {
+                                    System.out.println("✓ private_key ya tiene el formato correcto");
                                 }
                             }
                         }
