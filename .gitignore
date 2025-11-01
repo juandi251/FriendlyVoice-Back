@@ -37,3 +37,6 @@ build/
 **/firebase-service-account.local.json
 firebase-service-account*.json
 firebase-adminsdk*.json
+*JSON*CORREGIDO*.txt
+*formato-correcto*.txt
+*validacion*.txt

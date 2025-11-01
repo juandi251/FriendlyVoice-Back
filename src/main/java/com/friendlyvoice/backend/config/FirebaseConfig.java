@@ -43,29 +43,57 @@ public class FirebaseConfig {
                 System.out.println("Tamaño del JSON: " + firebaseServiceAccountJson.length() + " caracteres");
                 System.out.println("Primeros 100 caracteres: " + firebaseServiceAccountJson.substring(0, Math.min(100, firebaseServiceAccountJson.length())));
                 try {
-                    // Normalizar el JSON: eliminar saltos de línea reales entre propiedades
-                    // PERO mantener \\n en el private_key (doble backslash = escape en JSON)
-                    String normalizedJson = firebaseServiceAccountJson
-                        .replaceAll("(?<!\\\\)\\r?\\n", " ")  // Eliminar saltos de línea reales (excepto los escapados)
-                        .replaceAll(" +", " ")                 // Normalizar espacios múltiples
-                        .trim();
+                    // Normalizar el JSON: convertir saltos de línea reales a formato JSON correcto
+                    String jsonToUse = firebaseServiceAccountJson.trim();
                     
                     // Verificar que empieza y termina correctamente
-                    if (!normalizedJson.startsWith("{")) {
+                    if (!jsonToUse.startsWith("{")) {
                         throw new IOException("El JSON no empieza con '{'. Verifique el formato.");
                     }
-                    if (!normalizedJson.endsWith("}")) {
+                    if (!jsonToUse.endsWith("}")) {
                         throw new IOException("El JSON no termina con '}'. Verifique el formato.");
                     }
                     
-                    // Verificar que el private_key tenga los saltos de línea correctamente escapados
-                    if (!normalizedJson.contains("\\\\n") && normalizedJson.contains("private_key")) {
-                        System.out.println("ADVERTENCIA: private_key puede no tener saltos de línea escapados correctamente");
-                        System.out.println("El private_key debe tener \\\\n (doble backslash + n) para representar saltos de línea");
+                    // CRÍTICO: Convertir saltos de línea reales dentro del private_key a \\n
+                    // El private_key puede tener saltos de línea reales que causan el error
+                    if (jsonToUse.contains("private_key")) {
+                        // Buscar el valor del private_key entre comillas
+                        int privateKeyStart = jsonToUse.indexOf("\"private_key\"");
+                        if (privateKeyStart >= 0) {
+                            int valueStart = jsonToUse.indexOf("\"", privateKeyStart + 12) + 1; // +12 es la longitud de "private_key"
+                            int valueEnd = jsonToUse.indexOf("\"", valueStart);
+                            if (valueEnd > valueStart && valueEnd < jsonToUse.length()) {
+                                String privateKeyValue = jsonToUse.substring(valueStart, valueEnd);
+                                
+                                // Si tiene saltos de línea reales, convertirlos a \\n
+                                if (privateKeyValue.contains("\n") || privateKeyValue.contains("\r")) {
+                                    System.out.println("Convirtiendo saltos de línea reales en private_key a formato JSON (\\\\n)");
+                                    String fixedPrivateKey = privateKeyValue
+                                        .replace("\\r\\n", "\\\\n")  // Windows
+                                        .replace("\\r", "\\\\n")     // Mac
+                                        .replace("\n", "\\\\n")       // Unix
+                                        .replace("\r", "\\\\n");      // Mac antiguo
+                                    
+                                    // Reemplazar el valor en el JSON
+                                    jsonToUse = jsonToUse.substring(0, valueStart) + fixedPrivateKey + jsonToUse.substring(valueEnd);
+                                    System.out.println("✓ private_key normalizado correctamente");
+                                }
+                            }
+                        }
                     }
                     
-                    System.out.println("JSON normalizado, tamaño: " + normalizedJson.length() + " caracteres");
-                    serviceAccount = new ByteArrayInputStream(normalizedJson.getBytes("UTF-8"));
+                    // Ahora eliminar saltos de línea reales entre propiedades (fuera de strings)
+                    // Esto convierte el JSON a una sola línea
+                    jsonToUse = jsonToUse
+                        .replace("\r\n", " ")
+                        .replace("\r", " ")
+                        .replace("\n", " ")
+                        .replaceAll(" +", " ")
+                        .trim();
+                    
+                    System.out.println("JSON procesado, tamaño: " + jsonToUse.length() + " caracteres");
+                    
+                    serviceAccount = new ByteArrayInputStream(jsonToUse.getBytes("UTF-8"));
                     System.out.println("✓ Stream creado desde variable de entorno");
                 } catch (Exception e) {
                     System.err.println("ERROR al crear stream desde variable de entorno: " + e.getMessage());
