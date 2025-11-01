@@ -29,22 +29,29 @@ public class FirebaseConfig {
         if (FirebaseApp.getApps().isEmpty()) {
             System.out.println("=== Inicializando Firebase Admin SDK ===");
             System.out.println("URL de base de datos: " + databaseUrl);
+            System.out.println("Ruta de configuración: " + firebaseConfigPath);
             
             InputStream serviceAccount = null;
             
             // PRIORIDAD 1: Intentar cargar desde variable de entorno (producción - Render)
             String firebaseServiceAccountJson = System.getenv("FIREBASE_SERVICE_ACCOUNT");
+            System.out.println("Verificando variable de entorno FIREBASE_SERVICE_ACCOUNT...");
+            System.out.println("Variable encontrada: " + (firebaseServiceAccountJson != null ? "SÍ" : "NO"));
+            
             if (firebaseServiceAccountJson != null && !firebaseServiceAccountJson.isEmpty()) {
                 System.out.println("Intentando cargar credenciales desde variable de entorno FIREBASE_SERVICE_ACCOUNT");
                 System.out.println("Tamaño del JSON: " + firebaseServiceAccountJson.length() + " caracteres");
+                System.out.println("Primeros 100 caracteres: " + firebaseServiceAccountJson.substring(0, Math.min(100, firebaseServiceAccountJson.length())));
                 try {
                     serviceAccount = new ByteArrayInputStream(firebaseServiceAccountJson.getBytes("UTF-8"));
-                    System.out.println("✓ Credenciales cargadas desde variable de entorno");
+                    System.out.println("✓ Stream creado desde variable de entorno");
                 } catch (Exception e) {
-                    System.err.println("ERROR al parsear JSON desde variable de entorno: " + e.getMessage());
+                    System.err.println("ERROR al crear stream desde variable de entorno: " + e.getMessage());
                     e.printStackTrace();
-                    throw new IOException("Failed to parse Firebase credentials from environment variable", e);
+                    throw new IOException("Failed to create stream from FIREBASE_SERVICE_ACCOUNT environment variable", e);
                 }
+            } else {
+                System.out.println("Variable de entorno FIREBASE_SERVICE_ACCOUNT no encontrada o vacía, intentando otras fuentes...");
             }
             // PRIORIDAD 2: Intentar cargar desde classpath (desarrollo local)
             if (serviceAccount == null && firebaseConfigPath != null && firebaseConfigPath.startsWith("classpath:")) {
@@ -56,7 +63,9 @@ public class FirebaseConfig {
                 } else {
                     System.err.println("ERROR: Firebase service account file NOT FOUND en classpath: " + path);
                     System.err.println("Asegúrate de que el archivo firebase-service-account.local.json existe en src/main/resources/");
-                    throw new IOException("Firebase service account file not found in classpath: " + path);
+                    System.err.println("NOTA: En producción (Render), debe configurar la variable de entorno FIREBASE_SERVICE_ACCOUNT");
+                    throw new IOException("Firebase service account file not found in classpath: " + path + 
+                        ". Configure FIREBASE_SERVICE_ACCOUNT environment variable for production.");
                 }
             }
             // PRIORIDAD 3: Intentar cargar desde sistema de archivos
@@ -72,10 +81,16 @@ public class FirebaseConfig {
             }
             
             if (serviceAccount == null) {
-                throw new IOException("No se encontraron credenciales de Firebase. Configure FIREBASE_SERVICE_ACCOUNT o firebase.config.path");
+                System.err.println("ERROR: No se pudo cargar credenciales de Firebase desde ninguna fuente.");
+                System.err.println("Fuentes intentadas:");
+                System.err.println("  1. Variable de entorno FIREBASE_SERVICE_ACCOUNT: " + (System.getenv("FIREBASE_SERVICE_ACCOUNT") != null ? "EXISTE pero está vacía" : "NO EXISTE"));
+                System.err.println("  2. Classpath: " + firebaseConfigPath);
+                throw new IOException("No se encontraron credenciales de Firebase. " +
+                    "Para producción (Render), configure la variable de entorno FIREBASE_SERVICE_ACCOUNT con el JSON completo.");
             }
 
             try {
+                System.out.println("Parseando credenciales desde stream...");
                 GoogleCredentials credentials = GoogleCredentials.fromStream(serviceAccount);
                 System.out.println("✓ Credenciales de Google parseadas correctamente");
                 
