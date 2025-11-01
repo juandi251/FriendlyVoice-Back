@@ -45,11 +45,9 @@ public class FirebaseConfig {
                     e.printStackTrace();
                     throw new IOException("Failed to parse Firebase credentials from environment variable", e);
                 }
-            } else {
-                System.out.println("Variable de entorno FIREBASE_SERVICE_ACCOUNT no encontrada, intentando otras fuentes...");
             }
             // PRIORIDAD 2: Intentar cargar desde classpath (desarrollo local)
-            else if (firebaseConfigPath != null && firebaseConfigPath.startsWith("classpath:")) {
+            if (serviceAccount == null && firebaseConfigPath != null && firebaseConfigPath.startsWith("classpath:")) {
                 String path = firebaseConfigPath.replace("classpath:", "");
                 System.out.println("Intentando cargar desde classpath: " + path);
                 serviceAccount = getClass().getResourceAsStream(path);
@@ -62,7 +60,7 @@ public class FirebaseConfig {
                 }
             }
             // PRIORIDAD 3: Intentar cargar desde sistema de archivos
-            else if (firebaseConfigPath != null && !firebaseConfigPath.isEmpty()) {
+            if (serviceAccount == null && firebaseConfigPath != null && !firebaseConfigPath.isEmpty()) {
                 System.out.println("Intentando cargar desde sistema de archivos: " + firebaseConfigPath);
                 try {
                     serviceAccount = new FileInputStream(firebaseConfigPath);
