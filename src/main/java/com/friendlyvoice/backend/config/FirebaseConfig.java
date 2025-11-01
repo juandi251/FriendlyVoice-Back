@@ -10,6 +10,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 import jakarta.annotation.PostConstruct;
+import java.io.ByteArrayInputStream;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -17,33 +18,50 @@ import java.io.InputStream;
 @Configuration
 public class FirebaseConfig {
 
-    @Value("${firebase.config.path}")
+    @Value("${firebase.config.path:classpath:/firebase-service-account.local.json}")
     private String firebaseConfigPath;
 
-    @Value("${firebase.database.url}")
+    @Value("${firebase.database.url:https://friendlyvoice-app-default-rtdb.firebaseio.com}")
     private String databaseUrl;
+
+    // Variable de entorno para producción (Render)
+    @Value("${FIREBASE_SERVICE_ACCOUNT:}")
+    private String firebaseServiceAccountJson;
 
     @PostConstruct
     public void initialize() throws IOException {
         if (FirebaseApp.getApps().isEmpty()) {
             System.out.println("=== Inicializando Firebase Admin SDK ===");
-            System.out.println("Ruta de configuración: " + firebaseConfigPath);
             System.out.println("URL de base de datos: " + databaseUrl);
             
-            InputStream serviceAccount;
+            InputStream serviceAccount = null;
             
-            // Try to load from classpath first, then from file system
-            if (firebaseConfigPath.startsWith("classpath:")) {
+            // PRIORIDAD 1: Intentar cargar desde variable de entorno (producción - Render)
+            if (firebaseServiceAccountJson != null && !firebaseServiceAccountJson.isEmpty()) {
+                System.out.println("Intentando cargar credenciales desde variable de entorno FIREBASE_SERVICE_ACCOUNT");
+                try {
+                    serviceAccount = new ByteArrayInputStream(firebaseServiceAccountJson.getBytes("UTF-8"));
+                    System.out.println("✓ Credenciales cargadas desde variable de entorno");
+                } catch (Exception e) {
+                    System.err.println("ERROR al parsear JSON desde variable de entorno: " + e.getMessage());
+                    throw new IOException("Failed to parse Firebase credentials from environment variable", e);
+                }
+            }
+            // PRIORIDAD 2: Intentar cargar desde classpath (desarrollo local)
+            else if (firebaseConfigPath != null && firebaseConfigPath.startsWith("classpath:")) {
                 String path = firebaseConfigPath.replace("classpath:", "");
                 System.out.println("Intentando cargar desde classpath: " + path);
                 serviceAccount = getClass().getResourceAsStream(path);
-                if (serviceAccount == null) {
+                if (serviceAccount != null) {
+                    System.out.println("✓ Archivo de credenciales cargado desde classpath");
+                } else {
                     System.err.println("ERROR: Firebase service account file NOT FOUND en classpath: " + path);
                     System.err.println("Asegúrate de que el archivo firebase-service-account.local.json existe en src/main/resources/");
                     throw new IOException("Firebase service account file not found in classpath: " + path);
                 }
-                System.out.println("✓ Archivo de credenciales cargado desde classpath");
-            } else {
+            }
+            // PRIORIDAD 3: Intentar cargar desde sistema de archivos
+            else if (firebaseConfigPath != null && !firebaseConfigPath.isEmpty()) {
                 System.out.println("Intentando cargar desde sistema de archivos: " + firebaseConfigPath);
                 try {
                     serviceAccount = new FileInputStream(firebaseConfigPath);
@@ -52,6 +70,10 @@ public class FirebaseConfig {
                     System.err.println("ERROR: No se pudo cargar el archivo de credenciales desde: " + firebaseConfigPath);
                     throw e;
                 }
+            }
+            
+            if (serviceAccount == null) {
+                throw new IOException("No se encontraron credenciales de Firebase. Configure FIREBASE_SERVICE_ACCOUNT o firebase.config.path");
             }
 
             try {
@@ -70,8 +92,12 @@ public class FirebaseConfig {
                 System.err.println("ERROR al inicializar Firebase:");
                 System.err.println("  - Mensaje: " + e.getMessage());
                 System.err.println("  - Causa: " + (e.getCause() != null ? e.getCause().getMessage() : "N/A"));
-                System.err.println("Verifica que el archivo de credenciales sea válido y tenga el formato correcto.");
+                System.err.println("Verifica que las credenciales sean válidas y tengan el formato correcto.");
                 throw e;
+            } finally {
+                if (serviceAccount != null) {
+                    serviceAccount.close();
+                }
             }
         } else {
             System.out.println("Firebase Admin SDK ya está inicializado");
