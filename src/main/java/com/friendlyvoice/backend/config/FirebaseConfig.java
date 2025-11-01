@@ -24,10 +24,6 @@ public class FirebaseConfig {
     @Value("${firebase.database.url:https://friendlyvoice-app-default-rtdb.firebaseio.com}")
     private String databaseUrl;
 
-    // Variable de entorno para producción (Render)
-    @Value("${FIREBASE_SERVICE_ACCOUNT:}")
-    private String firebaseServiceAccountJson;
-
     @PostConstruct
     public void initialize() throws IOException {
         if (FirebaseApp.getApps().isEmpty()) {
@@ -37,15 +33,20 @@ public class FirebaseConfig {
             InputStream serviceAccount = null;
             
             // PRIORIDAD 1: Intentar cargar desde variable de entorno (producción - Render)
+            String firebaseServiceAccountJson = System.getenv("FIREBASE_SERVICE_ACCOUNT");
             if (firebaseServiceAccountJson != null && !firebaseServiceAccountJson.isEmpty()) {
                 System.out.println("Intentando cargar credenciales desde variable de entorno FIREBASE_SERVICE_ACCOUNT");
+                System.out.println("Tamaño del JSON: " + firebaseServiceAccountJson.length() + " caracteres");
                 try {
                     serviceAccount = new ByteArrayInputStream(firebaseServiceAccountJson.getBytes("UTF-8"));
                     System.out.println("✓ Credenciales cargadas desde variable de entorno");
                 } catch (Exception e) {
                     System.err.println("ERROR al parsear JSON desde variable de entorno: " + e.getMessage());
+                    e.printStackTrace();
                     throw new IOException("Failed to parse Firebase credentials from environment variable", e);
                 }
+            } else {
+                System.out.println("Variable de entorno FIREBASE_SERVICE_ACCOUNT no encontrada, intentando otras fuentes...");
             }
             // PRIORIDAD 2: Intentar cargar desde classpath (desarrollo local)
             else if (firebaseConfigPath != null && firebaseConfigPath.startsWith("classpath:")) {
