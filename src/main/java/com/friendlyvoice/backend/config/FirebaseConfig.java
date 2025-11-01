@@ -102,15 +102,32 @@ public class FirebaseConfig {
                 FirebaseApp.initializeApp(options);
                 System.out.println("✓ Firebase Admin SDK inicializado correctamente");
                 System.out.println("=== Firebase Configuración Completada ===");
-            } catch (IOException e) {
-                System.err.println("ERROR al inicializar Firebase:");
-                System.err.println("  - Mensaje: " + e.getMessage());
-                System.err.println("  - Causa: " + (e.getCause() != null ? e.getCause().getMessage() : "N/A"));
-                System.err.println("Verifica que las credenciales sean válidas y tengan el formato correcto.");
-                throw e;
+            } catch (Exception e) {
+                System.err.println("==========================================");
+                System.err.println("ERROR CRÍTICO al inicializar Firebase");
+                System.err.println("==========================================");
+                System.err.println("Tipo de error: " + e.getClass().getName());
+                System.err.println("Mensaje: " + e.getMessage());
+                if (e.getCause() != null) {
+                    System.err.println("Causa: " + e.getCause().getClass().getName());
+                    System.err.println("Mensaje de causa: " + e.getCause().getMessage());
+                }
+                System.err.println("------------------------------------------");
+                System.err.println("POSIBLES SOLUCIONES:");
+                System.err.println("1. Verifique que FIREBASE_SERVICE_ACCOUNT contenga un JSON válido");
+                System.err.println("2. El JSON debe estar en una sola línea sin saltos de línea");
+                System.err.println("3. Verifique que todas las comillas estén correctamente escapadas");
+                System.err.println("4. Pruebe validar el JSON en un validador online");
+                System.err.println("==========================================");
+                e.printStackTrace();
+                throw new IOException("Failed to initialize Firebase: " + e.getMessage(), e);
             } finally {
                 if (serviceAccount != null) {
-                    serviceAccount.close();
+                    try {
+                        serviceAccount.close();
+                    } catch (IOException e) {
+                        System.err.println("Error al cerrar stream: " + e.getMessage());
+                    }
                 }
             }
         } else {
